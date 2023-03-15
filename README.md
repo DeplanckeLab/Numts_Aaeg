@@ -7,4 +7,4 @@
 		* Plots  
 		* Circos  
 
-<img alt="alt_text" width="460px" height="420px" src="Plots/RIL_mtDNA_numts_all_samples_circos.svg"/>
+<img alt="alt_text" width="680px" height="680px" src="Plots/RIL_mtDNA_numts_all_samples_circos.svg"/>
