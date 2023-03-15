@@ -1,0 +1,821 @@
+---
+title: "NUMTS"
+output: html_notebook
+---
+
+
+
+###Before ocntinuing shall check to add the int(CHR) from the python script.... and rerun all the samples.
+
+
+###Libraries
+```{r}
+.libPaths("/data/botos/RLibs/")
+#install.packages("wesanderson")
+library(wesanderson)
+library(tidyr)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(RColorBrewer)
+library(brew)
+library(circlize)
+library(GenomicRanges)
+library(IRanges)
+library(karyoploteR)
+
+```
+
+
+### Read files 
+```{r}
+##Load the data
+files <- list.files(all.files = TRUE,path = "/data/botos/2022_12_01_NUMTS_Aedes_Aegypti/",
+                    pattern = "*.mt.disc.sam.cluster.summary.tsv",
+                    recursive = TRUE, 
+                    full.names = TRUE)
+#Sort the files by the number of output
+files <- files[order(nchar(files))]
+files
+```
+
+
+
+```{r}
+#files
+#name_files <- gsub("/home/marius/Documents/Projects/prsa/02_Data/STAR/mapping/release102/","",files)
+# name_files <- gsub("D:/PhD/Projects/prsa/02_Data/STAR/mapping/release102/","",files)
+name_files <- gsub("/data/botos/2022_12_01_NUMTS_Aedes_Aegypti//NUMTS_OUTPUT_","",
+                   gsub(".mt.disc.sam.cluster.summary.tsv","",
+                       gsub("WGS.*F[0-9][0-9]*/","",files)))
+
+names(files) <- name_files
+#head(files)
+#Read it inside lists.
+#lapply(names(files),function(x) head(x))
+dfs_numts <- lapply(files,function(fj) read.table(fj,header = FALSE))
+paste0("List of ",length(dfs_numts)," samples.\n")
+
+
+# Split the column into the position data
+dfs_numts_pos <- lapply(dfs_numts,function(df) {
+  separate(data = df,col = V3,into = c("chr","start","end","MT","mt_start","mt_end"),sep = "_")
+})
+
+# add the length of the segment in the chr or mt chromosomes
+dfs_numts_pos_match_len <- lapply(dfs_numts_pos,function(df) {
+  df <- dplyr::mutate(df,
+                      chr_matchLen = as.integer(end) - as.integer(start),
+                      mt_matchLen = as.integer(mt_end) - as.integer(mt_start))
+  return(df)})
+
+#print
+
+dfs_numts_pos_match_len$WGS_017_E20_F03
+```
+
+
+### Check names
+```{r}
+
+# V5 = Cluster sequences that are in the same cluster 500bp apart gap.
+# V6 = cluster of read sequences that are max 500bp apart and mininum 2
+lapply(dfs_numts_pos_match_len,function(df) {
+  df[["V2"]][1] 
+  # names(df)
+  # df %>% dplyr::filter(chr %in% c(1,2,3)) %>% dplyr::filter(chr_matchLen > 5 & mt_matchLen > 5) %>%  dplyr::arrange(V6)
+  })
+
+```
+
+
+
+
+###Visualize the data in violins
+```{r}
+library(ggplot2)
+library(dplyr)
+# Iterate over the list of dataframes
+plots_df_numts <- lapply(dfs_numts_pos_match_len,function(df){
+  # Create the plot
+  fig <- ggplot(df  %>% dplyr::group_by(V2) %>% dplyr::filter(chr_matchLen > 5 & mt_matchLen > 5), aes(x=chr_matchLen,y="")) +
+    geom_violin(fill="#FAF0E6", alpha=0.4) +
+    geom_jitter(aes(color="Nuclear"), size=3, alpha=0.3,show.legend = FALSE) +
+    #geom_boxplot(width=0.1) +
+    scale_color_manual(values="#000080") +
+    # xlim(-30,max(df$chr_matchLen)+30) +
+    #xlim(0,1100) +
+    scale_x_continuous(breaks = seq(0,1100,100),limits=c(-30,1100)) +
+    labs(title=paste0("Nuclear: ",unique(df$V2))) +
+    theme(axis.text.y=element_blank(),
+          axis.ticks.y=element_blank(),
+          axis.title.y = element_blank(),
+          plot.background = element_rect(fill = "white"),
+          panel.background = element_rect(fill = "white"),
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  
+  fig2 <- ggplot( df %>% dplyr::group_by(V2) %>% dplyr::filter(chr_matchLen > 0 & mt_matchLen > 0), aes(x=mt_matchLen,y="")) +
+    geom_violin(fill="#FAF0E6", alpha=0.4) +
+    geom_jitter(aes(color="Mitochondrial"), size=3, alpha=0.3,show.legend = FALSE) +
+    #geom_boxplot(width=0.1) +
+    scale_color_manual(values="#800020") +
+    # xlim(-30,max(df$mt_matchLen)+30) +
+    #xlim(0,12900) +
+    scale_x_continuous(breaks = seq(0,12900,500),limits=c(-30,12900)) +
+    labs(title=paste0("Mitochondrial: ",unique(df$V2))) +
+    theme(axis.text.y=element_blank(),
+          axis.ticks.y=element_blank(),
+          axis.title.y = element_blank(),
+          plot.background = element_rect(fill = "white"),
+          panel.background = element_rect(fill = "white"),
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  
+  # Print the plot
+  print(list(fig,fig2))
+  
+  # Add the plot to the list
+  #plots <- c(plots, list(fig))
+  return(plots=list(fig,fig2))
+})
+
+```
+
+
+
+```{r,fig.width=8,fig.height=8}
+
+par(mfrow = c(35, 1))#, mar = rep(0.5, 4))
+library(gridExtra)
+lapply(names(plots_df_numts),function(nm) {
+  grid.arrange(grobs=plots_df_numts[[nm]],ncol=2)})
+  
+```
+
+
+
+### Filter numts that are not 0 in the MT or the CHR and show how many numts per RIL. (inlcude maybe the clustering of the numts later)
+```{r}
+lapply(dfs_numts_pos_match_len,function(df) {
+  df %>% dplyr::group_by(V2) %>% dplyr::filter(chr %in% c(1,2,3)) %>% dplyr::filter(chr_matchLen > 20 & mt_matchLen > 20) %>% dplyr::summarise(n=n())})
+```
+
+
+
+#### List of Samples and number of numts per sample in the Chr 1,2,3
+```{r,fig.width=19,fig.height=12}
+# counts_of_numts_longer_than_20bp <- lapply(dfs_numts_pos_match_len,function(df) {
+#   df %>% dplyr::group_by(V2) %>% dplyr::filter(chr %in% c(1,2,3)) %>% dplyr::filter(chr_matchLen > 20 & mt_matchLen > 20) %>% dplyr::summarise(n=n())})
+# 
+
+counts_of_numts_longer_than_20bp <- lapply(dfs_numts_pos_match_len,function(df) df %>% dplyr::filter(chr %in% c(1,2,3)) %>% dplyr::filter(chr_matchLen > 20 & mt_matchLen > 20)   %>% dplyr::mutate_at(c("mt_start","mt_end","mt_matchLen"),as.numeric) %>% group_by(group = cut(mt_matchLen, breaks = seq(0,17000,50))) %>% summarize(mt_matchLen = n(),sampleID = df[[2]][1]))
+
+counts_of_numts_longer_than_20bp_df <- do.call(rbind,counts_of_numts_longer_than_20bp)
+
+#dir.create("/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Table",recursive = TRUE)
+
+write.table(counts_of_numts_longer_than_20bp_df,file = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Table/numts_ranges_all_samples.csv",sep = ",")
+```
+
+
+```{r,fig.width=26,fig.height=29}
+p <- counts_of_numts_longer_than_20bp_df %>% ggplot(aes(x=as.factor(group), y=mt_matchLen,fill = ("red"))) +
+  geom_col(alpha=0.7) +
+  #geom_col(data= dataT[1:39,],mapping = aes(x=date,y=income/2 ,fill=d1)) +
+  geom_line(data= counts_of_numts_longer_than_20bp_df,group=1,mapping=aes(x=as.factor(group),y=mt_matchLen)) +
+  # geom_point(data = counts_of_numts_longer_than_20bp_df,
+  #            aes(x = counts_of_numts_longer_than_20bp_df$group[which.max(counts_of_numts_longer_than_20bp_df$mt_matchLen)],
+  #                y = counts_of_numts_longer_than_20bp_df$mt_matchLen[which.max(counts_of_numts_longer_than_20bp_df$mt_matchLen)]), color="black",size=3) +
+  #geom_area(position = "identity", alpha = 0.5,color="red") +
+  #geom_bar(stat = "identity") +
+  #stat_density(aes(geom="line",position="identity")) + 
+  #geom_density(aes(after_stat(count))) +
+  #xlim(c(0,17000)) +
+  #coord_flip() +
+  labs(fill = "Numts Length Group") +
+  scale_x_discrete("group") +
+  facet_wrap(~sampleID,ncol = 2) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) 
+
+p
+
+svg(filename = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Plots/numts_ranges_all_samples_barplots_per_sample.svg",
+    width = 16,
+    height = 31)
+p
+dev.off()
+```
+
+
+
+#### Genes for circos 
+
+```{r}
+###add mt genes
+mt_genes_ae <- read.table(file = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/Visualization_samples/mt_ae_gtf_genes_trna_rrna.txt",sep = "\t")
+ 
+# unique(mt_genes_ae$V5) 
+# unique(mt_genes_ae$V6) 
+# unique(mt_genes_ae$V7)
+# unique(mt_genes_ae$V4) 
+
+mt_genes_ae$paste <- paste(mt_genes_ae$V5,mt_genes_ae$V6,sep="_")
+mt_genes_ae <- mt_genes_ae[,c("V2","V3","paste")]
+mt_genes_ae <- mt_genes_ae %>% dplyr::filter(paste != "_") %>% dplyr::mutate(Genes= str_remove(paste,"^_|_$"))
+mt_genes_ae <- mt_genes_ae[,c("V2","V3","Genes")]
+mt_genes_ae$chr <- "chrM"
+mt_genes_ae$value <- 1
+mt_genes_ae <- mt_genes_ae[,c("chr","V2","V3","value","Genes")]
+colnames(mt_genes_ae) <- c("chr","start","end","value","gene")
+mt_genes_ae$start <- mt_genes_ae$start * 100000
+mt_genes_ae$end <- mt_genes_ae$end * 100000
+mt_genes_ae <- mt_genes_ae %>% dplyr::mutate_at(c("start","end","value"),as.numeric)
+
+# chr_genes_ae <- df1_link_WGS_017_E20_F03
+# chr_genes_ae$gene <- "Ecxample.2.1aa.2"
+
+# anno_genes_ae <- rbind(mt_genes_ae,chr_genes_ae)
+# 
+# anno_genes_ae <- anno_genes_ae %>% dplyr::mutate_at(c("start","end","value"),as.numeric)
+
+```
+
+```{r}
+
+# # run and commennt and re runn the one on top
+# mt_genes_ae <- read.table(file = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/Visualization_samples/mt_ae_gtf_genes_trna_rrna.txt",sep = "\t")
+# mt_genes_2 <- mt_genes_ae %>% dplyr::filter(V1 == "gene") %>% dplyr::select(V2,V3,V6) %>% dplyr::filter(V6 != "") %>% dplyr::mutate(chr="chrM",
+#                                                                                                                                     value = 1)
+# mt_genes_2 <- mt_genes_2[,c("chr","V2","V3","value","V6")]
+# colnames(mt_genes_2) <- c("chr","start","end","value","gene")
+# mt_genes_2$start <- mt_genes_2$start * 100000
+# mt_genes_2$end <- mt_genes_2$end * 100000
+# mt_genes_2 <- mt_genes_2 %>% dplyr::mutate_at(c("start","end","value"),as.numeric)
+
+```
+
+
+### Apply circos for all samples 
+```{r,fig.height=10,fig.width=10}
+circos_RIL_plots <- lapply(dfs_numts_pos_match_len,function(df) {
+  
+  #png(filename = paste0("/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Plots/",df[["V2"]][1],"_circos_chr_to_mt.png"),width = 680,height = 680)
+  #svg(filename = paste0("/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Plots/",df[["V2"]][1],"_circos_chr_to_mt.svg"),width = 10,height = 10)
+
+  
+  #run code for circos
+  df_s <- df %>% dplyr::group_by(chr) %>%
+    dplyr::filter(chr_matchLen > 20 & mt_matchLen > 20) %>%
+    dplyr::arrange(V6) %>% 
+    dplyr::select(chr,start,end,chr_matchLen,mt_start,mt_end,mt_matchLen) %>%
+    dplyr::distinct()
+  
+  df_s$mt_start <- as.integer(df_s$mt_start)*100000
+  df_s$mt_end <- as.integer(df_s$mt_end)*100000
+  
+  chr_df_s <- df_s %>% dplyr::filter(chr %in% c(1,2,3)) %>% dplyr::select(chr,start,end,chr_matchLen) %>% dplyr::mutate(chr=paste0("chr",chr))
+  colnames(chr_df_s) <- c("chr","start","end","value")
+  mt_df_s <- df_s %>% dplyr::filter(chr %in% c(1,2,3)) %>% dplyr::select(mt_start,mt_end,mt_matchLen)
+  mt_df_s$chr <- "chrM"
+  colnames(mt_df_s) <- c("chr","start","end","value")
+
+  chr_df_s$start <- as.integer(chr_df_s$start)
+  chr_df_s$end <- as.integer(chr_df_s$end)
+  chr_mt_df_s <- dplyr::bind_rows(chr_df_s,mt_df_s)
+  
+  #Create the chr and mt regions of the numts by splitting them.
+
+  df1_link <- chr_mt_df_s %>% dplyr::filter(chr %in% c("chr1","chr2","chr3"))
+  df2_link <- chr_mt_df_s %>% dplyr::filter(chr %in% c("chrM")) 
+  
+  
+  
+  # Plot the circos
+  #circos.par("track.height"=0.8, gap.degree=5, cell.padding=c(0, 0, 0, 0))
+  circos.clear()
+  circos.par(gap.degree=5)
+
+  ref_fd_ae <- data.frame("Chromosome"=c("chr1","chr2","chr3","chrM"),"ChromStart"=c(0,0,0,0),"Chromend"=c(310827022,474425716,409777670,16790*100000))
+
+  #circos.genomicInitialize(ref_fd_ae)
+  circos.genomicInitialize(ref_fd_ae,plotType = NULL)
+  circos.genomicLabels(mt_genes_ae ,labels.column = 5, cex=0.7,line_lwd=0.6, line_col="grey20", connection_height = 0.019,
+                       labels_height = 0.2,niceFacing = TRUE,side = "outside")
+  # circos.genomicLabels(mt_genes_2 ,labels.column = 5, cex=0.5,line_lwd=0.6, line_col="grey20", connection_height = 0.05, labels_height = 0.2,niceFacing = TRUE,side = "outside")
+
+  circos.track(ylim=c(0, 1), panel.fun=function(x, y) {
+    chr=CELL_META$sector.index
+    xlim=CELL_META$xlim
+    ylim=CELL_META$ylim
+    circos.text(mean(xlim), mean(ylim), chr, cex=0.8)}, bg.col = c("#0000FF40","#0000FF40","#0000FF40","#FF000040"), bg.border=F, track.height=0.06)
+  
+  circos.track(track.index = get.current.track.index(),
+               panel.fun = function(x, y) {
+                 circos.genomicAxis(h = "bottom", direction = "inside",labels.cex = 0.6,tickLabelsStartFromZero = TRUE)})
+  
+  set_track_gap(gap = 0.04)
+  
+  # circos.genomicTrack(chr_mt_df_s %>% dplyr::distinct(),
+  #                     track.height=0.1,
+  #                     panel.fun = function(region, value, ...) {
+  #                       circos.genomicPoints(region, value,
+  #                                            pch = 6,
+  #                                            cex = 1.6,
+  #                                            col="black")})#col=ifelse(value[[1]] > 150,"red","black"))})
+  circos.genomicTrack(chr_mt_df_s %>% dplyr::distinct(),
+                      track.height=0.2,
+                      panel.fun = function(region,value,...) {
+                        circos.genomicRect(region, value,col = "#FF000040",...)})
+                        #circos.genomicPoints(region, value,pch = 6,cex = 1.6,col="black")})#col=ifelse(value[[1]] > 150,"red","black"))})
+  
+
+  
+  #circos.update(sector.index = "chrM",track.index = 4)
+  #circos.points(x=col="red")
+  
+  col <- alpha(wes_palette("Zissou1", n = nrow(df2_link), type = "continuous"), 0.4)
+  circos.genomicLink(df1_link %>%  dplyr::mutate_at(c("start","end","value"),as.numeric),
+                     df2_link %>%  dplyr::mutate_at(c("start","end","value"),as.numeric),
+                     #use lirbary wesanderson http://www.sthda.com/english/wiki/colors-in-r
+                     col = col)
+  # col = colorRampPalette(brewer.pal(5, "Dark2"))(nrow(df2_link_WGS_017_E20_F03)))#,border = NA,transparency=0.1)
+  title(paste0(df[["V2"]][1]))
+ # dev.off()
+
+})
+```
+
+
+### save the table of the plots
+```{r,fig.height=9,fig.width=9}
+
+#v5 is cluster of 500bp gaps
+#v6 is cluster of more than 2 reads supporting the previous cluster
+lapply(dfs_numts_pos_match_len,function(df) {
+  df_s <- df %>% dplyr::group_by(chr) %>%
+    dplyr::filter(chr_matchLen > 20 & mt_matchLen > 20) %>%
+    dplyr::arrange(V6) %>% 
+    dplyr::select(chr,start,end,chr_matchLen,mt_start,mt_end,mt_matchLen) %>%
+    dplyr::distinct() %>% 
+    write.table(paste0("/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Table/",df[["V2"]][1],"_chr_to_mt_table.csv"),sep = ",",col.names = TRUE,row.names = FALSE)
+})
+
+```
+
+
+### karyotype plotter
+
+```{r}
+mt_genes_2_ranges <- GRanges(seqnames = "NC_035159.1",ranges = IRanges(start = mt_genes_2$start/100000,end = mt_genes_2$end/100000),genes=mt_genes_2$gene, y0=0,y1=0.13)
+#mt_genes_2_ranges <- GRanges(seqnames = mt_genes_2$chr,ranges = IRanges(start = mt_genes_2$start/100000,end = mt_genes_2$end/100000),genes=mt_genes_2$gene, y0=0,y1=0.13)
+
+
+```
+
+
+###### Wrangle for each sample the genomic rannges
+
+```{r}
+library(S4Vectors)
+library(GenomicRanges)
+library(IRanges)
+library(karyoploteR)
+
+list_of_regions <- lapply(dfs_numts_pos_match_len,function(df){
+  
+  cat(paste0("start with sample: ",df[["V2"]][1],"\n"))
+  ranges_df <- GRanges(seqnames = df %>% dplyr::filter(chr_matchLen > 20 & mt_matchLen > 20) %>% dplyr::filter(chr %in% c(1,2,3)) %>% dplyr::pull(chr),
+                       ranges =IRanges(start = as.numeric(df %>% dplyr::filter(chr_matchLen > 20 & mt_matchLen > 20) %>%
+                                                            dplyr::filter(chr %in% c(1,2,3)) %>%
+                                                            dplyr::pull(mt_start)),
+                                       end = as.numeric(df %>% dplyr::filter(chr_matchLen > 20 & mt_matchLen > 20) %>%
+                                                          dplyr::filter(chr %in% c(1,2,3)) %>%
+                                                          dplyr::pull(mt_end))),
+                       real_chr="chrM")
+  
+  ranges_df <- as.data.frame(ranges_df)
+  ranges_df$seqnames2 <- ranges_df$seqnames
+  #Set the name of the chrm to the official ncbi nane that i use to create under the genes for overlapping.
+  #ranges_df$seqnames <- "chrM"
+  ranges_df$seqnames <- "NC_035159.1"
+  ranges_df <- dplyr::mutate(ranges_df,
+                             chr_start_end=paste0(seqnames,":",start,"-",end))
+  
+  cat("extracting regions\n")
+  empty_gr <- GRanges(seqnames = character(), IRanges(start = integer(), end = integer()))
+  
+  regs1 <- if(nrow(ranges_df %>% dplyr::filter(seqnames2 == 1)) != 0){
+    toGRanges(ranges_df %>% filter(seqnames2 == 1) %>% dplyr::pull(chr_start_end))
+  }else{
+  empty_gr}
+  
+  regs2 <- if(nrow(ranges_df %>% dplyr::filter(seqnames2 == 2)) != 0){
+    toGRanges(ranges_df %>% filter(seqnames2 == 2) %>% dplyr::pull(chr_start_end))
+  }else{
+  empty_gr}
+  
+  regs3 <- if(nrow(ranges_df %>% dplyr::filter(seqnames2 == 3)) != 0){
+    toGRanges(ranges_df %>% filter(seqnames2 == 3) %>% dplyr::pull(chr_start_end))
+  }else{
+  empty_gr}
+  
+  regs1_df <- as.data.frame(regs1) %>% dplyr::mutate(chrom="chr1")
+  regs2_df <- as.data.frame(regs2) %>% dplyr::mutate(chrom="chr2")
+  regs3_df <- as.data.frame(regs3) %>% dplyr::mutate(chrom="chr3")
+  regs_df <- rbind(regs1_df,regs2_df,regs3_df)
+  cat("done\n")
+  return(regs_df)})
+
+```
+
+```{r,fig.width=12,fig.height=4}
+library(S4Vectors)
+
+
+
+lapply(names(list_of_regions),function(kt){
+  
+  #svg(filename = paste0("/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Plots/karytypePlot_",kt,"numts_chr.svg"),width = 12,height = 4)
+  
+  custom.genome <- toGRanges(data.frame(chr=c("NC_035159.1"),start=c(0),end=c(16790)))
+  kp <- plotKaryotype(genome = custom.genome)
+  kpDataBackground(kp, r0 = 0,r1 = 0.25)
+  kpDataBackground(kp, r0 = 0.25,r1 = 0.5,col="#FF000040")
+  kpDataBackground(kp, r0 = 0.5,r1 = 0.75,col="#FF000040")
+  kpDataBackground(kp, r0 = 0.75,r1 = 1,col="#FF000040")
+  
+  
+   
+  
+  
+  kpRect(kp,mt_genes_2_ranges,col="red")
+  kpText(karyoplot = kp,data = mt_genes_2_ranges,labels = mt_genes_2_ranges$genes,y = 0.17,cex=0.6,col="red")
+  
+  #add mt sequences from  each chromoosome
+  #add numts from chr 1
+  kpRect(kp,data = list_of_regions[[kt]] %>% filter(chrom == "chr1") %>% toGRanges, y0 = 0.3,y1=0.4) 
+  #add numts from chr 2
+  kpRect(kp,data = list_of_regions[[kt]] %>% filter(chrom == "chr2") %>% toGRanges, y0 = 0.6,y1 = 0.7)
+  #add numts from chr 3
+  kpRect(kp,data = list_of_regions[[kt]] %>% filter(chrom == "chr3") %>% toGRanges, y0 = 0.8,y1 = 0.9)
+  title(paste0(kt))
+  
+  #dev.off()
+    
+})
+
+
+
+```
+
+
+
+```{r,fig.height=32,fig.width=12}
+
+list_of_regions_ID <- lapply(names(list_of_regions),function(name) {
+  df <- list_of_regions[[name]]
+  df$ID <- name
+  return(df)
+})
+
+svg(filename = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Plots/Postions_in_CHR_of_numts.svg",width = 10,height = 32)
+combined_list_of_regions_ID <- do.call(rbind,list_of_regions_ID)
+# combined_list_of_regions_ID <- dplyr::mutate(combined_list_of_regions_ID,pos_chr_start_end = paste0(chrom,":",start,"-",end))
+combined_list_of_regions_ID <- dplyr::mutate(combined_list_of_regions_ID,pos_chr_start_end = paste0(seqnames,":",start,"-",end))
+
+table(combined_list_of_regions_ID$pos_chr_start_end) %>% subset(combined_list_of_regions_ID$pos_chr_start_end > 1)
+
+combined_list_of_regions_ID %>% dplyr::group_by(pos_chr_start_end) %>% dplyr::mutate(counts_seqs=n()) %>% dplyr::filter(counts_seqs > 1)
+library(ggplot2)
+
+pp <- ggplot(combined_list_of_regions_ID %>% dplyr::group_by(pos_chr_start_end) %>% dplyr::arrange(.by_group = TRUE) %>% dplyr::mutate(counts_seqs=n()) %>% dplyr::filter(counts_seqs > 1),
+       aes(x = pos_chr_start_end,
+           y = as.factor(chrom),
+           color=pos_chr_start_end)) + 
+  
+  #geom_histogram(stat="count") + #binwidth = 1) + 
+  #geom_point(color="red") +
+  geom_point(position = position_jitter(width = 0.25,height = 0.25,seed = 123456),size=3,alpha=0.5) +
+  
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  #scale_y_discrete(chrom) +
+  #coord_flip() +
+  #cut("chr") +
+  #geom_text(stat = "count", aes(label = ifelse(count >= 2, count, "")), vjust = -0.25) + 
+  xlab("Position") + 
+  ylab("Count") +
+  facet_wrap(~ID,ncol=1) +
+  ggtitle("Points of NUMT(s) Positions")
+
+pp
+dev.off()
+
+write.table(combined_list_of_regions_ID %>% dplyr::group_by(pos_chr_start_end) %>% dplyr::arrange(.by_group = TRUE) %>% dplyr::mutate(counts_seqs=n()),file = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Table/Postions_in_CHR_of_numts.csv",sep = ",")
+
+```
+
+## Counnt overlaps by sample and all together and plot CIRCOS
+### Per sample
+```{r}
+library(plyranges)
+names(list_of_regions)
+list_of_regions_ID
+#https://bioconductor.org/packages/devel/bioc/vignettes/GenomicFeatures/inst/doc/GenomicFeatures.html
+library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+library(GenomicRanges)
+#Downloaded from NCBI
+gff_ae_txdb <- makeTxDbFromGFF(file = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Data/GCF_002204515.2_AaegL5.0_genomic.gff",format = "gff3",dataSource = "NCBI",organism = "Aedes aegypti",)
+
+#This were selected using cut,awk,grep by command line
+genes(gff_ae_txdb)
+head(seqlevels(gff_ae_txdb))
+
+
+#select only mt
+columns(gff_ae_txdb)
+seqlevels(gff_ae_txdb) <- "NC_035159.1"
+#from the fasta  /locus_tag="CFI06_mgp11"                      /db_xref="GeneID:33307558"      CDS             2903..3587                      /gene="COX2" 
+#cox2,atp8,atp6,cox3
+#gene names are not correctly extrracted ffrom the gff file
+keys_2_aaeg <- c("CFI06_mgp12","CFI06_mgp10","CFI06_mgp09","CFI06_mgp08") 
+keytypes(gff_ae_txdb)
+columns(gff_ae_txdb)
+keys(gff_ae_txdb)
+AnnotationDbi::select(gff_ae_txdb,keys = keys_2_aaeg,columns=columns(gff_ae_txdb), keytype="GENEID")
+#AnnotationDbi::select(gff_ae_txdb,keys = keys_2_aaeg,columns=c("TXSTART","TXEND","TXNAME","CDSNAME","EXONNAME"), keytype="GENEID")
+
+
+#retrieve all the transcripts from mitochondrial genome using this function as a granges
+gr_aaeg_transcripts  <- transcripts(gff_ae_txdb)
+gr_aaeg_genes  <- genes(gff_ae_txdb)
+
+gr_aaeg_genes[1:3]
+gr_aaeg_transcripts[1:3]
+
+
+
+
+
+
+### Create list of granges to count overlaps of the samples for the different numts.
+lists_of_granges_numts_chr_detail <- lapply(list_of_regions_ID,function(df) { 
+  #grange_list <- list()
+  #grange_list[[length(grange_list) + 1]] 
+  df %>% dplyr::mutate(pos_chr_start_end = paste0("chrM:",start,"-",end,"-origin-",chrom)) %>%  dplyr::select(seqnames,start,end,strand,chrom,ID,pos_chr_start_end) %>% plyranges::as_granges()})
+  #grange_list <-    
+  #return(grange_list)
+
+
+#Cerate a list of ranges to overlap to the genes in the CHR MT of Aedes aegypti
+granges_list_aeag <- GRangesList(lists_of_granges_numts_chr_detail)
+
+
+
+
+
+##find overlaps using plyranges (tutorial is really helpful)
+gr_aaeg_genes <- sort(gr_aaeg_genes)
+result_lists_aaeg <- list()
+result_lists_aaeg_genes_hit <- list()
+for (i in seq_along(1:length(granges_list_aeag))){
+  print(i)
+  result_lists_aaeg[[mcols(granges_list_aeag[[i]])[[2]][1]]] <- granges_list_aeag[[i]] %>%  join_overlap_inner(gr_aaeg_genes)
+  result_lists_aaeg_genes_hit[[mcols(granges_list_aeag[[i]])[[2]][1]]] <- result_lists_aaeg[[i]] %>% as.tibble() %>%
+    dplyr::group_by(gene_id) %>%
+    dplyr::summarise(numts_hitting_X_time_the_gene=n())
+  }
+
+
+# result_lists_aaeg
+# result_lists_aaeg_genes_hit
+
+
+converter_g <- read.table(file = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Data/genes_dbxref.csv",sep = ",")
+converter_t <- read.table(file = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Data/trnas_dbxref.csv",sep = ",")
+converter_t <- converter_t[,c(2,1)]
+names(converter_t) <- c("V1","V2")
+converter_gt <- rbind(converter_g,converter_t)
+names(converter_gt) <- c("symbol","dbxref")
+
+
+### Convert the dbxref genen names to symbols
+result_lists_aaeg_genes_hit_with_symbol <- lapply(result_lists_aaeg_genes_hit,function(nn) nn %>% dplyr::left_join(converter_gt,by = c("gene_id" = "dbxref")))
+
+
+result_lists_aaeg_genes_hit_with_symbol_counts <- lapply(result_lists_aaeg_genes_hit_with_symbol,function(cc) cc %>% dplyr::group_by(symbol) %>% dplyr::summarize(count=dplyr::n(),col2_sum=sum(numts_hitting_X_time_the_gene)))
+
+result_lists_aaeg_genes_hit_with_symbol_counts
+
+```
+
+
+### mtDNA numts circos per sample
+```{r,fig.width=11,fig.height=11}
+
+#mm="WGS_088_E20_F05"
+# result_lists_aaeg_genes_hit_with_symbol_counts[[""]]
+
+lapply(names(result_lists_aaeg_genes_hit_with_symbol_counts),function(mm) {
+  print(paste0("plotting for sample", mm))
+  
+  #png(filename = paste0("/home/botos/SVRAW1/botos/2023_02_08_NUMTS/Visualization_samples/R_CIRCOS_RIL/",df[["V2"]][1],".png"),width = 680,height = 680)
+  #svg(filename = paste0("/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Plots/RIL_mtDNA_overlap_numts_",mm,"_circos.svg"),width = 9,height = 9)
+  
+  
+  mt_genes_ae_2 <- mt_genes_ae
+  mt_genes_ae_2$start <- mt_genes_ae_2$start/100000
+  mt_genes_ae_2$end <- mt_genes_ae_2$end/100000
+
+
+  numts_hits_df_merged_counted_start_end <- mt_genes_ae_2 %>% dplyr::select(chr,start,end,gene) %>%
+    dplyr::right_join(result_lists_aaeg_genes_hit_with_symbol_counts[[mm]],by = c("gene"="symbol")) %>%
+    dplyr::mutate(value=col2_sum) %>%
+    dplyr::select(chr,start,end,value,gene) %>%
+    dplyr::arrange(start,end)
+  
+  
+  numts_hits_df_merged_counted_start_end$value_scaled <- numts_hits_df_merged_counted_start_end$value/10
+
+  
+  
+  library(circlize)
+  ref_fd_ae <- data.frame("Chromosome"=c("chrM"),"ChromStart"=c(1),"Chromend"=c(16790))
+  #circos.genomicInitialize(ref_fd_ae)
+  circos.genomicInitialize(ref_fd_ae,plotType = NULL)
+  circos.genomicLabels(mt_genes_ae_2 ,
+                       labels.column = 5,
+                       cex=0.7,line_lwd=0.6, line_col="grey20",
+                       connection_height = 0.019,
+                       col=ifelse(mt_genes_ae_2$gene %in% numts_hits_df_merged_counted_start_end$gene[numts_hits_df_merged_counted_start_end$value_scaled > mean(numts_hits_df_merged_counted_start_end$value_scaled)],"red","black"),
+                       labels_height = 0.2,niceFacing = TRUE,side = "outside")
+  
+  
+  # circos.genomicLabels(mt_genes_2 ,labels.column = 5, cex=0.5,line_lwd=0.6, line_col="grey20", connection_height = 0.05, labels_height = 0.2,niceFacing = TRUE,side = "outside")
+
+  circos.track(ylim=c(0, 1), panel.fun=function(x, y) {
+  chr=CELL_META$sector.index
+  xlim=CELL_META$xlim
+  ylim=CELL_META$ylim#
+  circos.text(mean(xlim), mean(ylim), chr, cex=0.8)}, bg.col = c("white"), bg.border=F, track.height=0.2) # the track height of the text specifies how thick is the track were we plot the bars
+  
+  circos.track(track.index = get.current.track.index(),
+               track.height=0.8,
+               ylim=c(0,1), #this track y lim specifies how big are the bars up to in the track y lim 
+               panel.fun = function(x, y) {
+                 circos.genomicAxis(h = "bottom", direction = "inside",labels.cex = 0.6,tickLabelsStartFromZero = FALSE)})
+  # set_track_gap(gap = 0.05)
+  
+  
+  # ddff <- mt_genes_ae_2 %>% dplyr::select(chr,start,end,gene) %>% dplyr::right_join(result_lists_aaeg_genes_hit_with_symbol_counts$WGS_211_E20_F02,by = c("gene"="symbol")) %>%dplyr::mutate(value=col2_sum) %>% dplyr::select(chr,start,end,value,gene) %>% dplyr::arrange(start,end)
+# 
+  # ddff_2 <- mt_genes_ae_2 %>% dplyr::select(chr,start,end,gene) %>% dplyr::right_join(result_lists_aaeg_genes_hit_with_symbol_counts$WGS_038_E20_F07,by = c("gene"="symbol")) %>% dplyr::mutate(value=col2_sum) %>% dplyr::select(chr,start,end,value,gene) %>% dplyr::arrange(start,end)
+
+
+  library(RColorBrewer)
+  green_pal <- colorRampPalette(brewer.pal(9, "Greens"))
+
+ 
+  map_value_to_color <- function(value) {
+    breaks <- seq(0,8,0.9)
+    colors <- green_pal(9)
+    colors[findInterval(value, breaks)]
+  }
+  
+  circos.rect(xleft = numts_hits_df_merged_counted_start_end$start,
+              ybottom = 0.01,
+              xright = numts_hits_df_merged_counted_start_end$end,
+              ytop = 0.02 + numts_hits_df_merged_counted_start_end$value_scaled,
+              #col = rgb(0.4, 0.7, 0.4, alpha = 0.5),
+              #col = ("#95D5B2"),
+              col = map_value_to_color(numts_hits_df_merged_counted_start_end$value_scaled),
+              #col = my_colors_scaled,
+              border = "black")
+  #circos.lines(CELL_META$cell.xlim, c(max(numts_hits_df_merged_counted_start_end$value_scaled)+0.02, max(numts_hits_df_merged_counted_start_end$value_scaled)+0.2),lwd = 2, lty = 2, col = "#A71246")
+  #circos.lines(CELL_META$cell.xlim, c(min(numts_hits_df_merged_counted_start_end$value)+5, min(numts_hits_df_merged_counted_start_end$value)+5),lwd = 2, lty = 2, col = "blue")
+  circos.lines(CELL_META$cell.xlim, c(mean(numts_hits_df_merged_counted_start_end$value_scaled)+0.01, mean(numts_hits_df_merged_counted_start_end$value_scaled)+0.01),lwd = 2, lty = 2, col = "#03071E")
+  
+  
+  
+  #dev.off()
+  #result_lists_aaeg_genes_hit_with_symbol_counts[[mm]]
+})
+
+
+lapply(names(result_lists_aaeg_genes_hit_with_symbol_counts),function(mm) {
+  print(paste0("saved sample", mm))
+  write.table(x = result_lists_aaeg_genes_hit_with_symbol_counts[[mm]],
+              file = paste0("/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Table/RIL_mtDNA_overlap_numts_",mm,"_circos_table.csv"),sep = ",")})
+       
+```
+
+
+
+### Count all samples together and circos it.
+```{r,fig.width=11,fig.height=11}
+#Add circos
+
+#this script run for all the samples summed up for all genes. could be also done individually.
+
+#png(filename = paste0("/home/botos/SVRAW1/botos/2023_02_08_NUMTS/Visualization_samples/R_CIRCOS_RIL/",df[["V2"]][1],".png"),width = 680,height = 680)
+svg(filename = paste0("/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Plots/RIL_mtDNA_numts_all_samples_circos.svg"),width = 9,height = 9)
+
+
+numts_hits_df_merged <- do.call(rbind,result_lists_aaeg_genes_hit_with_symbol_counts)
+numts_hits_df_merged_counted <- numts_hits_df_merged %>% dplyr::group_by(symbol) %>% dplyr::summarize(count=dplyr::n(),total_all_samples_sum=sum(col2_sum))
+
+mt_genes_ae_2 <- mt_genes_ae
+  mt_genes_ae_2$start <- mt_genes_ae_2$start/100000
+  mt_genes_ae_2$end <- mt_genes_ae_2$end/100000
+
+
+numts_hits_df_merged_counted_start_end <- mt_genes_ae_2 %>% dplyr::select(chr,start,end,gene) %>% dplyr::right_join(numts_hits_df_merged_counted,by = c("gene"="symbol")) %>% dplyr::mutate(value=total_all_samples_sum) %>% dplyr::select(chr,start,end,value,gene) %>% dplyr::arrange(start,end)
+
+
+
+
+library(circlize)
+ref_fd_ae <- data.frame("Chromosome"=c("chrM"),"ChromStart"=c(1),"Chromend"=c(16790))
+
+#circos.genomicInitialize(ref_fd_ae)
+circos.genomicInitialize(ref_fd_ae,plotType = NULL)
+
+mt_genes_ae_2 <- mt_genes_ae
+mt_genes_ae_2$start <- mt_genes_ae_2$start/100000
+mt_genes_ae_2$end <- mt_genes_ae_2$end/100000
+circos.genomicLabels(mt_genes_ae_2 ,labels.column = 5, cex=0.7,line_lwd=0.6, line_col="grey20", connection_height = 0.019,col=ifelse(numts_hits_df_merged_counted_start_end$value > mean(numts_hits_df_merged_counted_start_end$value),"red","black"),
+                     labels_height = 0.2,niceFacing = TRUE,side = "outside")
+# circos.genomicLabels(mt_genes_2 ,labels.column = 5, cex=0.5,line_lwd=0.6, line_col="grey20", connection_height = 0.05, labels_height = 0.2,niceFacing = TRUE,side = "outside")
+
+
+
+circos.track(ylim=c(0, 1), panel.fun=function(x, y) {
+chr=CELL_META$sector.index
+xlim=CELL_META$xlim
+ylim=CELL_META$ylim#
+circos.text(mean(xlim), mean(ylim), chr, cex=0.8)}, bg.col = c("white"), bg.border=F, track.height=0.2) # the track height of the text specifies how thick is the track were we plot the bars
+
+
+circos.track(track.index = get.current.track.index(),
+             track.height=0.8,
+             ylim=c(0,120), #this track y lim specifies how big are the bars up to in the track y lim 
+             panel.fun = function(x, y) {
+               circos.genomicAxis(h = "bottom", direction = "inside",labels.cex = 0.6,tickLabelsStartFromZero = FALSE)})
+# set_track_gap(gap = 0.05)
+
+
+
+library(RColorBrewer)
+green_pal <- colorRampPalette(brewer.pal(9, "Greens"))
+
+
+map_value_to_color <- function(value) {
+  breaks <- c(0, 10, 20, 30, 40, 50, 70, 90,110 )
+  colors <- green_pal(9)
+  colors[findInterval(value, breaks)] 
+}
+
+
+
+circos.rect(xleft = numts_hits_df_merged_counted_start_end$start,
+            ybottom = 5,
+            xright = numts_hits_df_merged_counted_start_end$end,
+            ytop = 5 + numts_hits_df_merged_counted_start_end$value,
+            #col = rgb(0.4, 0.7, 0.4, alpha = 0.5),
+            #col = ("#95D5B2"),
+            col = map_value_to_color(numts_hits_df_merged_counted_start_end$value),
+            #col = my_colors_scaled,
+            border = "black")
+circos.lines(CELL_META$cell.xlim, c(max(numts_hits_df_merged_counted_start_end$value)+5, max(numts_hits_df_merged_counted_start_end$value)+5),lwd = 2, lty = 2, col = "#A71246")
+#circos.lines(CELL_META$cell.xlim, c(min(numts_hits_df_merged_counted_start_end$value)+5, min(numts_hits_df_merged_counted_start_end$value)+5),lwd = 2, lty = 2, col = "blue")
+circos.lines(CELL_META$cell.xlim, c(mean(numts_hits_df_merged_counted_start_end$value)+5, mean(numts_hits_df_merged_counted_start_end$value)+5),lwd = 2, lty = 2, col = "#03071E")
+   
+dev.off()
+
+
+write.table(x = numts_hits_df_merged_counted_start_end,file = paste0("/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Table/RIL_mtDNA_numts_all_samples_circos.csv"),sep = ",")
+
+
+
+```
+```{r,fig.width=3,fig.height=1}
+library(ggplot2)
+
+# Create sample data with one column "value" ranging from 0 to 100
+data <- data.frame(value = 0:105)
+
+# Create a bar plot with gradient fill
+svg(filename = paste0("/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Plots/RIL_mtDNA_numts_all_samples_circos_LEGEND.svg"),width = 3,height = 4 )
+ggplot(data, aes(x = 1, y = value, fill = value)) + 
+  geom_bar(stat = "identity", width = 1) +
+  scale_fill_gradientn(colours = brewer.pal(9, "Greens"),guide = "legend") +
+  coord_flip() +
+  theme_void()
+dev.off()
+
+```
+
+```{r}
+save.image(file = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/R/numts_R_process.RData",compress = "gzip")
+```
+
+
+
