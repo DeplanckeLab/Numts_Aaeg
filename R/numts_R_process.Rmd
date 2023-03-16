@@ -168,6 +168,19 @@ lapply(dfs_numts_pos_match_len,function(df) {
 ```
 
 
+###barplot of the number of numts filtered >20 length in the nuclear chr and >20 mt chr
+```{r}
+per_sample_numts_df <- do.call(rbind,lapply(dfs_numts_pos_match_len,function(df) {df %>% dplyr::group_by(V2) %>% dplyr::filter(chr %in% c(1,2,3)) %>% dplyr::filter(chr_matchLen > 20 & mt_matchLen > 20) %>% dplyr::summarise(n=n())}))
+
+svg("/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Plots/number_of_numts_per_sample_larger_20bp.svg",width = 9,height = 5)
+per_sample_numts_df %>% ggplot(aes(x = V2,y = n)) +
+  geom_col() +
+  geom_text(data = per_sample_numts_df,aes(label=n), vjust= -0.2) +
+  ylab(label =  "Numts Per Sample") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) 
+dev.off()
+```
+
 
 #### List of Samples and number of numts per sample in the Chr 1,2,3
 ```{r,fig.width=19,fig.height=12}
@@ -1038,6 +1051,10 @@ ggplot(data, aes(x = 1, y = value, fill = value)) +
 
 ```{r}
 save.image(file = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/R/numts_R_process.RData",compress = "gzip")
+```
+
+```{r}
+load("/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/R/numts_R_process.RData")
 ```
 
 
