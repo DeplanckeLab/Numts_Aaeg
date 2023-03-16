@@ -1,0 +1,35 @@
+"symbol","count","col2_sum"
+"1","12S ribosomal RNA",1,15
+"2","16S ribosomal RNA",1,43
+"3","ATP6",1,13
+"4","ATP8",1,9
+"5","COX1",1,37
+"6","COX2",1,15
+"7","COX3",1,18
+"8","CYTB",1,25
+"9","ND1",1,17
+"10","ND2",1,18
+"11","ND3",1,10
+"12","ND4",1,16
+"13","ND4L",1,10
+"14","ND5",1,26
+"15","ND6",1,8
+"16","tRNA-Ala",1,8
+"17","tRNA-Arg",1,9
+"18","tRNA-Asn",1,7
+"19","tRNA-Asp",1,9
+"20","tRNA-Cys",1,6
+"21","tRNA-Glu",1,7
+"22","tRNA-Gly",1,8
+"23","tRNA-His",1,8
+"24","tRNA-Ile",1,4
+"25","tRNA-Leu",3,29
+"26","tRNA-Lys",1,8
+"27","tRNA-Met",1,4
+"28","tRNA-Phe",1,7
+"29","tRNA-Pro",1,4
+"30","tRNA-Ser",2,14
+"31","tRNA-Thr",1,4
+"32","tRNA-Trp",1,6
+"33","tRNA-Tyr",1,11
+"34","tRNA-Val",1,5

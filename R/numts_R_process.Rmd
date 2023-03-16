@@ -10,8 +10,11 @@ output: html_notebook
 
 ###Libraries
 ```{r}
-.libPaths("/data/botos/RLibs/")
-#install.packages("wesanderson")
+rm(list = ls(all.names = TRUE))
+#.libPaths("/data/botos/RLibs/")
+#.libPaths("/data/botos/RLibs/")
+#BiocManager::install("S4Vectors",update = TRUE,ask = FALSE,force = TRUE)
+#install.packages("wesanderson",lib = .libPaths()[1])
 library(wesanderson)
 library(tidyr)
 library(tidyverse)
@@ -20,7 +23,12 @@ library(ggplot2)
 library(RColorBrewer)
 library(brew)
 library(circlize)
+library(S4Vectors)
 library(GenomicRanges)
+# unloadNamespace("IRanges")
+# unloadNamespace("GenomeInfoDb")
+# unloadNamespace("rtracklayer")
+# unloadNamespace("plyranges")
 library(IRanges)
 library(karyoploteR)
 
@@ -241,15 +249,37 @@ mt_genes_ae <- mt_genes_ae %>% dplyr::mutate_at(c("start","end","value"),as.nume
 
 ```{r}
 
-# # run and commennt and re runn the one on top
-# mt_genes_ae <- read.table(file = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/Visualization_samples/mt_ae_gtf_genes_trna_rrna.txt",sep = "\t")
-# mt_genes_2 <- mt_genes_ae %>% dplyr::filter(V1 == "gene") %>% dplyr::select(V2,V3,V6) %>% dplyr::filter(V6 != "") %>% dplyr::mutate(chr="chrM",
-#                                                                                                                                     value = 1)
-# mt_genes_2 <- mt_genes_2[,c("chr","V2","V3","value","V6")]
-# colnames(mt_genes_2) <- c("chr","start","end","value","gene")
-# mt_genes_2$start <- mt_genes_2$start * 100000
-# mt_genes_2$end <- mt_genes_2$end * 100000
-# mt_genes_2 <- mt_genes_2 %>% dplyr::mutate_at(c("start","end","value"),as.numeric)
+
+mt_genes_ae <- read.table(file = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/Visualization_samples/mt_ae_gtf_genes_trna_rrna.txt",sep = "\t")
+mt_genes_2 <- mt_genes_ae %>% dplyr::filter(V1 == "gene") %>% dplyr::select(V2,V3,V6) %>% dplyr::filter(V6 != "") %>% dplyr::mutate(chr="chrM",
+                                                                                                                                    value = 1)
+mt_genes_2 <- mt_genes_2[,c("chr","V2","V3","value","V6")]
+colnames(mt_genes_2) <- c("chr","start","end","value","gene")
+mt_genes_2$start <- mt_genes_2$start * 100000
+mt_genes_2$end <- mt_genes_2$end * 100000
+mt_genes_2 <- mt_genes_2 %>% dplyr::mutate_at(c("start","end","value"),as.numeric)
+
+
+
+mt_genes_ae <- read.table(file = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/Visualization_samples/mt_ae_gtf_genes_trna_rrna.txt",sep = "\t")
+ 
+# unique(mt_genes_ae$V5) 
+# unique(mt_genes_ae$V6) 
+# unique(mt_genes_ae$V7)
+# unique(mt_genes_ae$V4) 
+
+mt_genes_ae$paste <- paste(mt_genes_ae$V5,mt_genes_ae$V6,sep="_")
+mt_genes_ae <- mt_genes_ae[,c("V2","V3","paste")]
+mt_genes_ae <- mt_genes_ae %>% dplyr::filter(paste != "_") %>% dplyr::mutate(Genes= str_remove(paste,"^_|_$"))
+mt_genes_ae <- mt_genes_ae[,c("V2","V3","Genes")]
+mt_genes_ae$chr <- "chrM"
+mt_genes_ae$value <- 1
+mt_genes_ae <- mt_genes_ae[,c("chr","V2","V3","value","Genes")]
+colnames(mt_genes_ae) <- c("chr","start","end","value","gene")
+mt_genes_ae$start <- mt_genes_ae$start * 100000
+mt_genes_ae$end <- mt_genes_ae$end * 100000
+mt_genes_ae <- mt_genes_ae %>% dplyr::mutate_at(c("start","end","value"),as.numeric)
+
 
 ```
 
@@ -365,7 +395,11 @@ lapply(dfs_numts_pos_match_len,function(df) {
 ### karyotype plotter
 
 ```{r}
-mt_genes_2_ranges <- GRanges(seqnames = "NC_035159.1",ranges = IRanges(start = mt_genes_2$start/100000,end = mt_genes_2$end/100000),genes=mt_genes_2$gene, y0=0,y1=0.13)
+# library(GenomicRanges)
+# sapply(c("IRanges", "AnnotationDbi", "GenomicAlignments", "plyranges", "restfulr", "GenomicRanges", "Biostrings", "SummarizedExperiment", "BiocIO", "XVector", "Rsamtools", "rtracklayer", "DelayedArray", "GenomeInfoDb"), unloadNamespace)
+
+library(plyranges)
+mt_genes_2_ranges <- GenomicRanges::GRanges(seqnames = "NC_035159.1",ranges = IRanges::IRanges(start = mt_genes_2$start/100000,end = mt_genes_2$end/100000),genes=mt_genes_2$gene, y0=0,y1=0.13)
 #mt_genes_2_ranges <- GRanges(seqnames = mt_genes_2$chr,ranges = IRanges(start = mt_genes_2$start/100000,end = mt_genes_2$end/100000),genes=mt_genes_2$gene, y0=0,y1=0.13)
 
 
@@ -375,16 +409,16 @@ mt_genes_2_ranges <- GRanges(seqnames = "NC_035159.1",ranges = IRanges(start = m
 ###### Wrangle for each sample the genomic rannges
 
 ```{r}
-library(S4Vectors)
-library(GenomicRanges)
-library(IRanges)
-library(karyoploteR)
+#library(S4Vectors)
+# library(GenomicRanges)
+# library(IRanges)
+#library(karyoploteR)
 
 list_of_regions <- lapply(dfs_numts_pos_match_len,function(df){
   
   cat(paste0("start with sample: ",df[["V2"]][1],"\n"))
-  ranges_df <- GRanges(seqnames = df %>% dplyr::filter(chr_matchLen > 20 & mt_matchLen > 20) %>% dplyr::filter(chr %in% c(1,2,3)) %>% dplyr::pull(chr),
-                       ranges =IRanges(start = as.numeric(df %>% dplyr::filter(chr_matchLen > 20 & mt_matchLen > 20) %>%
+  ranges_df <- GenomicRanges::GRanges(seqnames = df %>% dplyr::filter(chr_matchLen > 20 & mt_matchLen > 20) %>% dplyr::filter(chr %in% c(1,2,3)) %>% dplyr::pull(chr),
+                       ranges =IRanges::IRanges(start = as.numeric(df %>% dplyr::filter(chr_matchLen > 20 & mt_matchLen > 20) %>%
                                                             dplyr::filter(chr %in% c(1,2,3)) %>%
                                                             dplyr::pull(mt_start)),
                                        end = as.numeric(df %>% dplyr::filter(chr_matchLen > 20 & mt_matchLen > 20) %>%
@@ -401,7 +435,7 @@ list_of_regions <- lapply(dfs_numts_pos_match_len,function(df){
                              chr_start_end=paste0(seqnames,":",start,"-",end))
   
   cat("extracting regions\n")
-  empty_gr <- GRanges(seqnames = character(), IRanges(start = integer(), end = integer()))
+  empty_gr <- GenomicRanges::GRanges(seqnames = character(), IRanges::IRanges(start = integer(), end = integer()))
   
   regs1 <- if(nrow(ranges_df %>% dplyr::filter(seqnames2 == 1)) != 0){
     toGRanges(ranges_df %>% filter(seqnames2 == 1) %>% dplyr::pull(chr_start_end))
@@ -523,6 +557,7 @@ list_of_regions_ID
 library(TxDb.Hsapiens.UCSC.hg19.knownGene)
 library(GenomicRanges)
 #Downloaded from NCBI
+#Load the data from the git, uncompress it.
 gff_ae_txdb <- makeTxDbFromGFF(file = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Data/GCF_002204515.2_AaegL5.0_genomic.gff",format = "gff3",dataSource = "NCBI",organism = "Aedes aegypti",)
 
 #This were selected using cut,awk,grep by command line
@@ -812,6 +847,194 @@ ggplot(data, aes(x = 1, y = value, fill = value)) +
 dev.off()
 
 ```
+
+
+### Compare to already "reported NUMTS"
+```{r}
+
+kn_numts <- read.table("/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/KnowNumts/known_numts.csv",sep = ",")
+ 
+kn_numts$V1 <- gsub(x = kn_numts$V1,pattern = "-",replacement = ":")
+kn_numts <- kn_numts %>% separate(col = V1,into = c("chr","start","end"),sep = ":") %>% dplyr::mutate(seqnames="NC_035159.1",chr_start_end = paste0(chr,":",start,"-",end),metaInfo="blasted_numts_paper") %>% dplyr::group_by(start,end) %>% dplyr::arrange()
+
+kn_numts
+
+
+
+
+kn_numts_ranges <- kn_numts %>% dplyr::select(seqnames,start,end,chr,chr_start_end) %>% dplyr::mutate_at(c("start","end"),as.numeric) %>% plyranges::as_granges()
+
+
+
+##find overlaps using plyranges (tutorial is really helpful)
+gr_aaeg_genes <- sort(gr_aaeg_genes)
+results_kn_numts <- kn_numts_ranges %>%  join_overlap_inner(gr_aaeg_genes)
+
+
+results_kn_numts <- results_kn_numts %>% as.tibble() %>% dplyr::group_by(gene_id) %>%
+    dplyr::summarise(numts_hitting_X_time_the_gene=n())
+
+
+### Convert the dbxref genen names to symbols
+results_kn_numts_genes_hit_with_symbol <- results_kn_numts %>% dplyr::left_join(converter_gt,by = c("gene_id" = "dbxref")) 
+
+
+
+results_kn_numts_genes_hit_with_symbol_counts <- results_kn_numts_genes_hit_with_symbol %>% dplyr::group_by(symbol) %>%
+  dplyr::summarize(count=dplyr::n(),col2_sum=sum(numts_hitting_X_time_the_gene))
+
+
+results_kn_numts_genes_hit_with_symbol_counts
+
+
+
+```
+### Plot the circos of all the genes from where the numts overlap of all the RIL samples vs the known sequences.
+
+```{r,fig.width=10,fig.height=10}
+# numts_hits_df_merged_counted <- numts_hits_df_merged %>% dplyr::group_by(symbol) %>% dplyr::summarize(count=dplyr::n(),total_all_samples_sum=sum(col2_sum))
+
+# mt_genes_ae_2 <- mt_genes_ae
+
+# mt_genes_ae_2$start <- mt_genes_ae_2$start/100000
+# mt_genes_ae_2$end <- mt_genes_ae_2$end/100000
+
+
+# numts_hits_df_merged_counted_start_end <- mt_genes_ae_2 %>% dplyr::select(chr,start,end,gene) %>% dplyr::right_join(numts_hits_df_merged_counted,by = c("gene"="symbol")) %>% dplyr::mutate(value=total_all_samples_sum) %>% dplyr::select(chr,start,end,value,gene) %>% dplyr::arrange(start,end)
+
+# svg(filename = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Plots/knonwn_numts_circos_vs_RILs.svg",width = 9,height = 9)
+
+
+library(circlize)
+ref_fd_ae <- data.frame("Chromosome"=c("chrM"),"ChromStart"=c(1),"Chromend"=c(16790))
+
+#circos.genomicInitialize(ref_fd_ae)
+circos.genomicInitialize(ref_fd_ae,plotType = NULL)
+
+mt_genes_ae_2 <- mt_genes_ae
+mt_genes_ae_2$start <- mt_genes_ae_2$start/100000
+mt_genes_ae_2$end <- mt_genes_ae_2$end/100000
+circos.genomicLabels(mt_genes_ae_2 ,labels.column = 5, cex=0.7,line_lwd=0.6, line_col="grey20", connection_height = 0.019,col=ifelse(numts_hits_df_merged_counted_start_end$value > mean(numts_hits_df_merged_counted_start_end$value),"red","black"),
+                     labels_height = 0.2,niceFacing = TRUE,side = "outside")
+# circos.genomicLabels(mt_genes_2 ,labels.column = 5, cex=0.5,line_lwd=0.6, line_col="grey20", connection_height = 0.05, labels_height = 0.2,niceFacing = TRUE,side = "outside")
+
+
+
+circos.track(ylim=c(0, 1), panel.fun=function(x, y) {
+chr=CELL_META$sector.index
+xlim=CELL_META$xlim
+ylim=CELL_META$ylim#
+circos.text(mean(xlim), mean(ylim), chr, cex=0.8)}, bg.col = c("white"), bg.border=F, track.height=0.2) # the track height of the text specifies how thick is the track were we plot the bars
+
+
+circos.track(track.index = get.current.track.index(),
+             track.height=0.8,
+             ylim=c(0,120), #this track y lim specifies how big are the bars up to in the track y lim 
+             panel.fun = function(x, y) {
+               circos.genomicAxis(h = "bottom", direction = "inside",labels.cex = 0.6,tickLabelsStartFromZero = FALSE)})
+# set_track_gap(gap = 0.05)
+
+
+
+library(RColorBrewer)
+green_pal <- colorRampPalette(brewer.pal(9, "Greens"))
+
+
+map_value_to_color <- function(value) {
+  breaks <- c(0, 10, 20, 30, 40, 50, 70, 90,110 )
+  colors <- green_pal(9)
+  colors[findInterval(value, breaks)] 
+}
+
+
+
+circos.rect(xleft = numts_hits_df_merged_counted_start_end$start,
+            ybottom = 5,
+            xright = numts_hits_df_merged_counted_start_end$end,
+            ytop = 5 + numts_hits_df_merged_counted_start_end$value,
+            #col = rgb(0.4, 0.7, 0.4, alpha = 0.5),
+            #col = ("#95D5B2"),
+            col = map_value_to_color(numts_hits_df_merged_counted_start_end$value),
+            #col = my_colors_scaled,
+            border = "black")
+circos.lines(CELL_META$cell.xlim, c(max(numts_hits_df_merged_counted_start_end$value)+5, max(numts_hits_df_merged_counted_start_end$value)+5),lwd = 2, lty = 2, col = "#A71246")
+#circos.lines(CELL_META$cell.xlim, c(min(numts_hits_df_merged_counted_start_end$value)+5, min(numts_hits_df_merged_counted_start_end$value)+5),lwd = 2, lty = 2, col = "blue")
+circos.lines(CELL_META$cell.xlim, c(mean(numts_hits_df_merged_counted_start_end$value)+5, mean(numts_hits_df_merged_counted_start_end$value)+5),lwd = 2, lty = 2, col = "#03071E")
+   
+
+
+
+### Add the known numts
+
+results_kn_numts_genes_hit_with_symbol_counts_start_end <- mt_genes_ae_2 %>% dplyr::select(chr,start,end,gene) %>%
+  dplyr::right_join(results_kn_numts_genes_hit_with_symbol_counts,by = c("gene"="symbol")) %>%
+  dplyr::mutate(value=col2_sum) %>%
+  dplyr::select(chr,start,end,value,gene) %>%
+  dplyr::arrange(start,end)
+  
+results_kn_numts_genes_hit_with_symbol_counts_start_end$value_scaled <- results_kn_numts_genes_hit_with_symbol_counts_start_end$value/10
+
+
+reds_pal <- colorRampPalette(brewer.pal(9, "Reds"))
+
+
+map_value_to_color <- function(value) {
+  breaks <- c(0, 10, 20, 30, 40, 50, 70, 90,110 )
+  colors <- reds_pal(9)
+  colors[findInterval(value, breaks)] 
+}
+
+
+circos.track(track.height=0.2,
+             ylim=c(0,60))
+
+circos.rect(xleft = results_kn_numts_genes_hit_with_symbol_counts_start_end$start,
+            ybottom = 2.5,
+            xright = results_kn_numts_genes_hit_with_symbol_counts_start_end$end,
+            ytop = 2.5 + results_kn_numts_genes_hit_with_symbol_counts_start_end$value,
+            #col = rgb(0.4, 0.7, 0.4, alpha = 0.5),
+            #col = ("#95D5B2"),
+            col = map_value_to_color(results_kn_numts_genes_hit_with_symbol_counts_start_end$value),
+            #col = my_colors_scaled,
+            border = "black")
+circos.lines(CELL_META$cell.xlim, c(max(results_kn_numts_genes_hit_with_symbol_counts_start_end$value)+2.5,
+                                    max(results_kn_numts_genes_hit_with_symbol_counts_start_end$value)+2.5),lwd = 2, lty = 2, col = "#A71246")
+
+#circos.lines(CELL_META$cell.xlim, c(min(numts_hits_df_merged_counted_start_end$value)+5, min(numts_hits_df_merged_counted_start_end$value)+5),lwd = 2, lty = 2, col = "blue")
+circos.lines(CELL_META$cell.xlim, c(mean(results_kn_numts_genes_hit_with_symbol_counts_start_end$value)+2.5,
+                                    mean(results_kn_numts_genes_hit_with_symbol_counts_start_end$value)+2.5),lwd = 2, lty = 2, col = "#03071E")
+   
+
+###Here the last track of known numts are reported divided by 60 in the AREA to plot rather than 120 as in our numts.
+### the added values are reduced to half in order to "Keep it proportional" 
+
+# dev.off()
+
+
+write.table(results_kn_numts_genes_hit_with_symbol_counts_start_end,file = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Table/knonwn_numts_preprocess_3_table_circos_vs_RILs.csv",sep = ",")
+#processed hits in the genes used for the knonwn or reported numts.
+write.table(results_kn_numts_genes_hit_with_symbol,file = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Table/knonwn_numts_overlapping_trnas_genes_preprocess_1_before_circos.csv.csv",sep = ",")
+
+#processed hits in the genes used for the knonwn or reported numts, counted by gene or tRNA.
+write.table(results_kn_numts_genes_hit_with_symbol_counts, file = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Table/knonwn_numts_overlapping_trnas_genes_preprocess_2_before_circos.csv",sep = ",")
+```
+
+
+```{r,fig.width=2,fig.height=3}
+# Create sample data with one column "value" ranging from 0 to 100
+data <- data.frame(value = 0:max(results_kn_numts_genes_hit_with_symbol_counts_start_end$value))
+
+# Create a bar plot with gradient fill
+# svg(filename = paste0("/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/Plots/known_numts_vs_RIL_circos_red_LEGEND.svg"),width = 3,height = 4 )
+ggplot(data, aes(x = 1, y = value, fill = value)) + 
+  geom_bar(stat = "identity", width = 1) +
+  scale_fill_gradientn(colours = brewer.pal(9, "Reds"),guide = "legend") +
+  coord_flip() +
+  theme_void()
+# dev.off()
+```
+
+
 
 ```{r}
 save.image(file = "/home/botos/SVRAW1/botos/2023_02_08_NUMTS/final_numts/R/numts_R_process.RData",compress = "gzip")
