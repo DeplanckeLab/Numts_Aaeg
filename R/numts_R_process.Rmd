@@ -1046,6 +1046,86 @@ ggplot(data, aes(x = 1, y = value, fill = value)) +
   theme_void()
 # dev.off()
 ```
+### PCA populations
+
+```{r}
+
+
+```{r,fig.width=18,fig.height=9}
+require(dplyr)
+genes <- mt_genes_ae_2 %>% dplyr::select(c(gene,start,end))
+genes
+
+
+result_lists_aaeg_genes_hit_with_symbol_counts$WGS_017_E20_F03$symbol
+unified_allMTdna_all_RIL <- lapply(names(result_lists_aaeg_genes_hit_with_symbol_counts), function(nm) result_lists_aaeg_genes_hit_with_symbol_counts[[nm]] %>% right_join(genes,by = c("symbol" = "gene")) %>% dplyr::select(c(symbol,col2_sum)))
+
+names(unified_allMTdna_all_RIL) <- names(result_lists_aaeg_genes_hit_with_symbol_counts)
+
+colnames(unified_allMTdna_all_RIL[["WGS_017_E20_F03"]])
+
+
+#names returns only the names
+#unified_allMTdna_all_RIL_2 <- lapply(names(unified_allMTdna_all_RIL),function(nm) colnames(unified_allMTdna_all_RIL[[nm]]) <- c("symbol",nm))
+
+#setNames returns the object.
+unified_allMTdna_all_RIL_2 <- lapply(names(unified_allMTdna_all_RIL), function(nm) setNames(object = unified_allMTdna_all_RIL[[nm]],nm =  c("symbol",nm)))
+
+names(unified_allMTdna_all_RIL_2) <- names(result_lists_aaeg_genes_hit_with_symbol_counts)
+
+
+
+
+for (i in names(unified_allMTdna_all_RIL_2)) {
+  print(i)
+  unified_allMTdna_all_RIL_2[[i]][i][is.na(unified_allMTdna_all_RIL_2[[i]][i])] <- 0
+  
+}
+
+
+unified_allMTdna_all_RIL_2_df <- do.call(cbind,unified_allMTdna_all_RIL_2)
+
+
+unified_allMTdna_all_RIL_2_df$ID <- unified_allMTdna_all_RIL_2_df$WGS_017_E20_F03.symbol
+unified_allMTdna_all_RIL_2_df <- subset(unified_allMTdna_all_RIL_2_df,select = -grep(pattern = "*.symbol$",names(unified_allMTdna_all_RIL_2_df)))
+unified_allMTdna_all_RIL_2_mt <- as.matrix(unified_allMTdna_all_RIL_2_df[1:35])
+
+unified_allMTdna_all_RIL_2_mt
+rownames(unified_allMTdna_all_RIL_2_mt) <- unified_allMTdna_all_RIL_2_df$ID
+
+#unified_allMTdna_all_RIL_2 <- lapply(names(unified_allMTdna_all_RIL_2),function(dfnm) unified_allMTdna_all_RIL_2[[dfnm]] %>% mutate(dfnm = coalesce(dfnm,0)))
+
+#performs vby default the variation between the columns in each of the rows...
+#principal components based on the variation between the samples  in each of the 35genes
+#t()  principal components based on the variation between the genes across the 35 samples
+pca_ril <- prcomp(unified_allMTdna_all_RIL_2_mt)
+
+percentVar_obj <- pca_ril$sdev^2/sum(pca_ril$sdev^2)
+
+
+#pull PCA values out of the PCA object  #Save as a df
+pca_df = as.data.frame(pca_ril[2]$rotation)
+
+pca_df$Sample <- rownames(pca_df)
+
+
+require(ggplot2)
+
+pca_plot = ggplot(data = pca_df,aes(x=PC1, y=PC2,color=Sample)) + geom_jitter() +
+  labs(title="PCA RIL",
+       subtitle = "not scaled") +
+  xlab(paste0("PC",substr("PC1",start = 3,stop = 3),": ",
+              round(percentVar_obj[as.numeric(substr("PC1",start = 3,stop = 3))] * 100), "% variance")) +
+  ylab(paste0("PC",substr("PC2",start = 3,stop = 3),": ",
+              round(percentVar_obj[as.numeric(substr("PC2",start = 3,stop = 3))] * 100), "% variance"))
+
+pca_plot
+
+
+
+
+```
+```
 
 
 
