@@ -7,7 +7,7 @@ Wei W, Schon K, Elgar G, Orioli A, Tanguy M, Giess A, Tischkowitz M, Caulfield M
 	* *Analysis*  
 	* *Methods*  
 	  
-	To detect NUMTs, we used the aligned WGS BAM files and and extracted the discordant read pairs  
+	To detect NUMTs, we used the aligned WGS BAM files and extracted the discordant read pairs  
 	using samblaster and samtools and included the read pairs where one end aligns to nuclear genome  
 	and the other end aligns to the mtDNA reference sequence. The reads with mapping quality higher  
 	than 0 were used. The discordant reads were then clustered together based on sharing the same  
