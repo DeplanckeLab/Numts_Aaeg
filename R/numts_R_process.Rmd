@@ -1048,8 +1048,6 @@ ggplot(data, aes(x = 1, y = value, fill = value)) +
 ```
 ### PCA populations
 
-```{r}
-
 
 ```{r,fig.width=18,fig.height=9}
 require(dplyr)
@@ -1125,7 +1123,7 @@ pca_plot
 
 
 ```
-```
+
 
 
 
